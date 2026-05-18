@@ -71,14 +71,14 @@ The first 4 bits are the opcode. Like any other ISA, opcode determines how to de
 | Instruction | Description |
 | :---- | :---- |
 | 00E0 | Clear screen |
-| 1NNN | Jump to address NNN |
-| 6XNN | Set register VX |
-| 7XNN | ADD value to register VX |
 | 00EE | Return |
+| 1NNN | Jump to address NNN |
 | 2NNN | Call address at NNN |
 | 3XNN | Skip the next instruction if VX \= NN |
 | 4XNN | Skip the next instruction if VX \!= NN |
 | 5XY0 | Skip next instruction if VX \= VY |
+| 6XNN | Set register VX |
+| 7XNN | ADD value to register VX |
 | 8XY0 | Set VX \= VY |
 | 8XY1 | Set VX \= VX OR VY |
 | 8XY2 | Set VX \= VX AND VY |

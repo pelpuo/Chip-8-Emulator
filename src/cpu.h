@@ -6,6 +6,8 @@
 #include <iostream>
 #include <chrono>
 #include <random>
+#include <string.h>
+#include "defs.h"
 
 class CPU{
 
@@ -20,7 +22,7 @@ class CPU{
         uint8_t soundTimer{};
         uint8_t keypad[16]{};
         uint32_t video[64 * 32]{};
-        uint16_t opcode{};
+        uint16_t currentInstruction{};
 
     	std::default_random_engine randGen;
 	    std::uniform_int_distribution<uint8_t> randByte;        
