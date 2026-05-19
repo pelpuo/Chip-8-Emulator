@@ -1,5 +1,7 @@
 #include "cpu.h"
 
+using namespace std;
+
 CPU::CPU()
     : randGen(std::chrono::system_clock::now().time_since_epoch().count()) {
   LoadFontset();
@@ -55,9 +57,11 @@ void CPU::LoadFontset() {
 }
 
 void CPU::Cycle() {
-  CPU::currentInstruction =
-      (CPU::memory[programCounter] << 8) |
-      (CPU::memory[programCounter + 1]); // accounts for 2 bytes
+  currentInstruction = (memory[programCounter] << 8) |
+                       (memory[programCounter + 1]); // accounts for 2 bytes
+
+  std::cout << std::hex << currentInstruction << std::endl;
+
   int regX;
   int regY;
   int imm;
@@ -65,24 +69,29 @@ void CPU::Cycle() {
   int regXValue;
   int byte;
   uint8_t yPos, xPos, height;
-  uint32_t * screenPixel;
+  uint32_t *screenPixel;
   uint16_t spritePixel;
+  unsigned int pixelX, pixelY;
 
   // op is the first byte
   switch (currentInstruction & 0xF000) {
-    // Op = 0
-    switch (currentInstruction & 0x000F) {
+  // Op = 0
+  case 0x0000:
+    switch (currentInstruction) {
     // clear screen
-    case 0x0000:
+    case 0x00E0:
       memset(video, 0, sizeof(video));
       break;
 
     // return
-    case 0x000E:
+    case 0x00EE:
       // load RA from stack
       uint16_t returnAddr = stack[--stackPointer];
       programCounter = returnAddr;
+      break;
     }
+    programCounter += 2;
+    break;
 
   // Op = 1
   // jump to address at NNN
@@ -100,7 +109,7 @@ void CPU::Cycle() {
   // Op = 3
   // Skip next instruction if regX = NN
   case 0x3000:
-    regX = currentInstruction & 0x0F00;
+    regX = (currentInstruction & 0x0F00) >> 8;
     if (registers[regX] == (currentInstruction & 0x00FF)) {
       programCounter += 4;
     } else {
@@ -111,7 +120,7 @@ void CPU::Cycle() {
   // Op = 4
   // Skip next instruction if regX != NN
   case 0x4000:
-    regX = currentInstruction & 0x0F00;
+    regX = (currentInstruction & 0x0F00) >> 8;
     if (registers[regX] != (currentInstruction & 0x00FF)) {
       programCounter += 4;
     } else {
@@ -178,20 +187,22 @@ void CPU::Cycle() {
     case 0x0005:
       res = registers[regX] - registers[regY];
       registers[regX] = res;
-      registers[0xF] = res > 0;
+      registers[0xF] = res >= 0;
       break;
     // Set regX = regX >> 1
     case 0x0006:
+      registers[0xF] = registers[regX] & 0x1;
       registers[regX] = registers[regX] >> 1;
       break;
     // Set regX = regY - regX, set VF = Carry
     case 0x0007:
       res = registers[regY] - registers[regX];
       registers[regX] = res;
-      registers[0xF] = res > 0;
+      registers[0xF] = res >= 0;
       break;
     // Set regX = regX << 1
     case 0x000E:
+      registers[0xF] = (registers[regX] & 0x80) >> 7;
       registers[regX] = registers[regX] << 1;
       break;
     }
@@ -251,8 +262,16 @@ void CPU::Cycle() {
 
       for (unsigned int col = 0; col < 8; ++col) {
         spritePixel = spriteByte & (0x80u >> col);
-        screenPixel =
-            &video[(yPos + row) * VIDEO_WIDTH + (xPos + col)];
+        // screenPixel = &video[(yPos + row) * VIDEO_WIDTH + (xPos + col)];
+        pixelY = (yPos + row); //% VIDEO_HEIGHT;
+        pixelX = (xPos + col); // % VIDEO_WIDTH;
+
+        // CLIP pixels that go off the screen edge
+        if (pixelX >= VIDEO_WIDTH || pixelY >= VIDEO_HEIGHT) {
+          continue; 
+        }
+
+        screenPixel = &video[pixelY * VIDEO_WIDTH + pixelX];
 
         // Sprite pixel is on
         if (spritePixel) {
@@ -266,6 +285,7 @@ void CPU::Cycle() {
         }
       }
     }
+    programCounter+=2;
     break;
 
   // Op = E
@@ -301,44 +321,21 @@ void CPU::Cycle() {
     case 0x0007:
       registers[regX] = delayTimer;
       break;
-    // wait for key press then store value of the key in regX
-    case 0x000A:
-      if (keypad[0]) {
-        registers[regX] = 0;
-      } else if (keypad[1]) {
-        registers[regX] = 1;
-      } else if (keypad[2]) {
-        registers[regX] = 2;
-      } else if (keypad[3]) {
-        registers[regX] = 3;
-      } else if (keypad[4]) {
-        registers[regX] = 4;
-      } else if (keypad[5]) {
-        registers[regX] = 5;
-      } else if (keypad[6]) {
-        registers[regX] = 6;
-      } else if (keypad[7]) {
-        registers[regX] = 7;
-      } else if (keypad[8]) {
-        registers[regX] = 8;
-      } else if (keypad[9]) {
-        registers[regX] = 9;
-      } else if (keypad[10]) {
-        registers[regX] = 10;
-      } else if (keypad[11]) {
-        registers[regX] = 11;
-      } else if (keypad[12]) {
-        registers[regX] = 12;
-      } else if (keypad[13]) {
-        registers[regX] = 13;
-      } else if (keypad[14]) {
-        registers[regX] = 14;
-      } else if (keypad[15]) {
-        registers[regX] = 15;
-      } else {
-        programCounter -= 2;
+      // wait for key press then store value of the key in regX
+    case 0x000A: {
+      bool key_pressed = false;
+      for (uint8_t i = 0; i < 16; ++i) {
+        if (keypad[i]) {
+          registers[regX] = i;
+          key_pressed = true;
+          break; // Exit the loop on the first detected key
+        }
       }
-      break;
+
+      if (!key_pressed) {
+        programCounter -= 2; // Repeat instruction until key is detected
+      }
+    } break;
     // set delay timer value to regX
     case 0x0015:
       delayTimer = regXValue;
@@ -365,22 +362,33 @@ void CPU::Cycle() {
       break;
     // store registers V0 through regX in memory starting at location I
     case 0x0055:
-      for (uint8_t i = 0; i <= regXValue; ++i) {
+      for (uint8_t i = 0; i <= regX; ++i) {
         memory[indexRegister + i] = registers[i];
       }
       break;
     // read registers V0 through regX from memory starting at location I
     case 0x0065:
-      for (uint8_t i = 0; i <= regXValue; ++i) {
+      for (uint8_t i = 0; i <= regX; ++i) {
         registers[i] = memory[indexRegister + i];
       }
       break;
     }
     programCounter += 2;
+    break;
 
   // default case
   default:
     printf("\nUnimplemented op code: %.4X\n", currentInstruction);
     exit(3);
   }
+
+
+  if(delayTimer){
+    delayTimer--;
+  }
+
+  if(soundTimer){
+    soundTimer--;
+  }
+
 }
